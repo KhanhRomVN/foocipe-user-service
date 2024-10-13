@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const { handleRequest, createError } = require("../services/responseHandler");
 
 const generateOTP = () => crypto.randomBytes(3).toString("hex");
-const getEmailTemplate = (otp, role) => `
+const getEmailTemplate = (otp) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,12 +48,12 @@ const getEmailTemplate = (otp, role) => `
 <body>
     <div class="container">
         <h1>Email OTP Confirmation</h1>
-        <p>Dear ${role === "seller" ? "Seller" : "User"},</p>
-        <p>Thank you for registering with us. To complete your registration, please use the following One-Time Password (OTP):</p>
+        <p>Dear User,</p>
+        <p>Thank you for using our service. Please use the following One-Time Password (OTP):</p>
         <div class="otp-code">${otp}</div>
         <p>This OTP is valid for 10 minutes. Please do not share this code with anyone.</p>
         <p>If you didn't request this OTP, please ignore this email.</p>
-        <p>Best regards,<br>${role === "seller" ? "Saleso" : "Your Company Name"}</p>
+        <p>Best regards,<br>Your Company Name</p>
     </div>
     <div class="footer">
         This is an automated message. Please do not reply to this email.
@@ -65,59 +65,54 @@ const getEmailTemplate = (otp, role) => `
 const UserController = {
   getUser: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const user_id = req.user._id.toString();
-      const role = req.user.role;
-      return await UserModel.getUserById(user_id, role);
+      const user_id = req.user.id.toString();
+      return await UserModel.getUserById(user_id);
     });
   },
 
   getDetail: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const user_id = req.user._id.toString();
-      const role = req.user.role;
-      return await UserDetailModel.getDetail(user_id, role);
+      const user_id = req.user.id.toString();
+      return await UserDetailModel.getDetail(user_id);
     });
   },
 
   getAddress: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const user_id = req.user._id.toString();
-      const role = req.user.role;
-      return await UserDetailModel.getAddress(user_id, role);
+      const user_id = req.user.id.toString();
+      return await UserDetailModel.getAddress(user_id);
     });
   },
 
   updateUsername: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const { username, role } = req.body;
-      const user_id = req.user._id.toString();
-      await UserModel.updateUsername(user_id, username, role);
+      const { username } = req.body;
+      const user_id = req.user.id.toString();
+      await UserModel.updateUsername(user_id, username);
       return { message: "Username updated successfully" };
     });
   },
 
   updateDetail: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const user_id = req.user._id.toString();
-      const role = req.user.role;
-      await UserDetailModel.updateDetail(user_id, req.body, role);
-      return { message: "Updated customer information successfully" };
+      const user_id = req.user.id.toString();
+      await UserDetailModel.updateDetail(user_id, req.body);
+      return { message: "Updated user information successfully" };
     });
   },
 
   newEmail: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const role = req.user.role;
       const { newEmail } = req.body;
 
       const otp = generateOTP();
-      await OTPModel.storeOTP(newEmail, otp, role);
+      await OTPModel.storeOTP(newEmail, otp);
 
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
         to: newEmail,
         subject: "New Email OTP",
-        html: `<p>Your OTP code is: ${otp}</p>`,
+        html: getEmailTemplate(otp),
       });
 
       return { message: "OTP sent to email" };
@@ -127,22 +122,21 @@ const UserController = {
   updateEmail: async (req, res) => {
     handleRequest(req, res, async (req) => {
       const { newEmail, otp } = req.body;
-      const user_id = req.user._id;
-      const role = req.user.role;
+      const user_id = req.user.id;
 
-      const validOTP = await OTPModel.verifyOTP(newEmail, otp, role);
+      const validOTP = await OTPModel.verifyOTP(newEmail, otp);
       if (!validOTP) {
         throw createError("Invalid OTP", 400, "INVALID_OTP");
       }
 
-      await UserModel.updateUserField(user_id, { ["email"]: newEmail }, role);
+      await UserModel.updateUserField(user_id, { email: newEmail });
       // create notification
       const notificationData = {
-        title: "New Email OTP",
-        content: `Your OTP code is: ${otp}`,
+        title: "Email Updated",
+        content: `Your email has been updated to ${newEmail}`,
         notification_type: "account_notification",
         target_type: "individual",
-        target_ids: [req.user._id.toString()],
+        target_ids: [req.user.id.toString()],
         can_delete: false,
         can_mark_as_read: false,
         is_read: false,
@@ -155,17 +149,16 @@ const UserController = {
 
   updatePassword: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const role = req.user.role;
       const { newPassword } = req.body;
-      const user_id = req.user._id.toString();
-      await UserModel.updatePassword(user_id, newPassword, role);
+      const user_id = req.user.id.toString();
+      await UserModel.updatePassword(user_id, newPassword);
       // create notification
       const notificationData = {
         title: "Password Updated",
         content: `Your password has been updated successfully!`,
         notification_type: "account_notification",
         target_type: "individual",
-        target_ids: [req.user._id.toString()],
+        target_ids: [req.user.id.toString()],
         can_delete: false,
         can_mark_as_read: false,
         is_read: false,
@@ -179,14 +172,13 @@ const UserController = {
   forgetPassword: async (req, res) => {
     handleRequest(req, res, async (req) => {
       const { email } = req.body;
-      const role = req.user.role;
       const otp = generateOTP();
-      await OTPModel.storeOTP(email, otp, role);
+      await OTPModel.storeOTP(email, otp);
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
         to: email,
         subject: "Password Reset OTP",
-        html: getEmailTemplate(otp, role),
+        html: getEmailTemplate(otp),
       });
 
       return { message: "OTP sent to email" };
@@ -196,22 +188,22 @@ const UserController = {
   updateForgetPassword: async (req, res) => {
     handleRequest(req, res, async (req) => {
       const { email, otp, newPassword } = req.body;
-      const role = req.user.role;
 
-      const validOTP = await OTPModel.verifyOTP(email, otp, role);
+      const validOTP = await OTPModel.verifyOTP(email, otp);
       if (!validOTP) {
         throw createError("Invalid OTP", 400, "INVALID_OTP");
       }
 
-      await UserModel.updateForgetPassword(email, newPassword, role);
+      await UserModel.updateForgetPassword(email, newPassword);
 
       // create notification
+      const user = await UserModel.getUserByEmail(email);
       const notificationData = {
         title: "Password Reset",
         content: `Your password has been reset successfully!`,
         notification_type: "account_notification",
         target_type: "individual",
-        target_ids: [req.user._id.toString()],
+        target_ids: [user.id.toString()],
         can_delete: false,
         can_mark_as_read: false,
         is_read: false,

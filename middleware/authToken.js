@@ -2,26 +2,22 @@ const jwt = require("jsonwebtoken");
 const { UserModel } = require("../models");
 const { createError, sendError } = require("../services/responseHandler");
 
-const verifyToken = (accessToken) => {
-  if (!accessToken) {
+const verifyToken = (access_token) => {
+  if (!access_token) {
     throw createError("No accessToken provided", 401, "NO_TOKEN_PROVIDED");
   }
-  return jwt.verify(accessToken, process.env.JWT_SECRET_KEY);
+  return jwt.verify(access_token, process.env.JWT_SECRET_KEY);
 };
 
-const createAuthMiddleware = (roles) => async (req, res, next) => {
+const authToken = async (req, res, next) => {
   try {
-    const accessToken = req.header("accessToken");
-    const decoded = verifyToken(accessToken);
+    const access_token = req.header("access_token");
+    const decoded = verifyToken(access_token);
 
-    const user = await UserModel.getUserById(decoded.user_id, decoded.role);
+    const user = await UserModel.getUserById(decoded.user_id);
 
     if (!user) {
       throw createError("User not found", 404, "USER_NOT_FOUND");
-    }
-
-    if (!roles.includes(user.role)) {
-      throw createError("You are not authorized", 403, "UNAUTHORIZED_ROLE");
     }
 
     req.user = user;
@@ -33,9 +29,9 @@ const createAuthMiddleware = (roles) => async (req, res, next) => {
 };
 
 const refreshAccessToken = async (req, res, next) => {
-  const refreshToken = req.header("refreshToken");
+  const refresh_token = req.header("refresh_token");
 
-  if (!refreshToken) {
+  if (!refresh_token) {
     return sendError(
       res,
       createError("Refresh token not provided", 401, "NO_REFRESH_TOKEN")
@@ -43,33 +39,33 @@ const refreshAccessToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = verifyToken(refreshToken, process.env.JWT_SECRET_KEY);
+    const decoded = verifyToken(refresh_token, process.env.JWT_SECRET_KEY);
 
-    const user = await UserModel.getUserById(decoded.user_id, decoded.role);
+    const user = await UserModel.getUserById(decoded.user_id);
 
-    if (!user || user.refreshToken !== refreshToken) {
+    if (!user || user.refresh_token !== refresh_token) {
       throw createError("Invalid refresh token", 401, "INVALID_REFRESH_TOKEN");
     }
 
     const newAccessToken = jwt.sign(
-      { user_id: user._id, role: user.role },
+      { user_id: user._id },
       process.env.JWT_SECRET_KEY,
       { expiresIn: "15m" }
     );
 
     const newRefreshToken = jwt.sign(
-      { user_id: user._id, role: user.role },
+      { user_id: user._id },
       process.env.JWT_SECRET_KEY,
       { expiresIn: "7d" }
     );
 
-    await UserModel.updateRefreshToken(user._id, newRefreshToken, user.role);
+    await UserModel.updateRefreshToken(user._id, newRefreshToken);
 
     req.token = {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
+      access_token: newAccessToken,
+      refresh_token: newRefreshToken,
     };
-    req.user = user; // Thêm thông tin user vào request
+    req.user = user;
     next();
   } catch (error) {
     console.error("Error in refreshAccessToken:", error);
@@ -78,10 +74,6 @@ const refreshAccessToken = async (req, res, next) => {
 };
 
 module.exports = {
-  authToken: createAuthMiddleware(["customer", "seller"]),
-  authCustomerToken: createAuthMiddleware(["customer"]),
-  authSellerToken: createAuthMiddleware(["seller"]),
-  authAdminToken: createAuthMiddleware(["admin"]),
-  authEmployeeToken: createAuthMiddleware(["employee"]),
+  authToken,
   refreshAccessToken,
 };

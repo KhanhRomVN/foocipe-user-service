@@ -5,13 +5,12 @@ const { createError } = require('../services/responseHandler');
 const saltRounds = 10;
 
 const UserModel = {
-  registerUser: async (userData, role) => {
+  registerUser: async (userData) => {
     const { username, email, password } = userData;
     try {
-      const hashedPassword = await bcrypt.hash(password, saltRounds);
       const result = await query(
-        'INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4) RETURNING id',
-        [username, email, hashedPassword, role]
+        'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id',
+        [username, email, password]
       );
       return result.rows[0].id;
     } catch (error) {
@@ -19,11 +18,11 @@ const UserModel = {
     }
   },
 
-  confirmEmail: async (email, role) => {
+  confirmEmail: async (email) => {
     try {
       const result = await query(
-        'UPDATE users SET email_confirmed = true WHERE email = $1 AND role = $2 RETURNING *',
-        [email, role]
+        'UPDATE users SET email_confirmed = true WHERE email = $1 RETURNING *',
+        [email]
       );
       if (result.rows.length === 0) {
         throw createError('User not found', 404, 'USER_NOT_FOUND');
@@ -34,9 +33,9 @@ const UserModel = {
     }
   },
 
-  getUserById: async (user_id, role) => {
+  getUserById: async (user_id) => {
     try {
-      const result = await query('SELECT * FROM users WHERE id = $1 AND role = $2', [user_id, role]);
+      const result = await query('SELECT * FROM users WHERE id = $1', [user_id]);
       if (result.rows.length === 0) {
         throw createError('User not found', 404, 'USER_NOT_FOUND');
       }
@@ -46,29 +45,29 @@ const UserModel = {
     }
   },
 
-  getUserByUsername: async (username, role) => {
+  getUserByUsername: async (username) => {
     try {
-      const result = await query('SELECT * FROM users WHERE username = $1 AND role = $2', [username, role]);
+      const result = await query('SELECT * FROM users WHERE username = $1', [username]);
       return result.rows[0];
     } catch (error) {
       throw createError(`Database operation failed: ${error.message}`, 500, 'DB_OPERATION_FAILED');
     }
   },
 
-  getUserByEmail: async (email, role) => {
+  getUserByEmail: async (email) => {
     try {
-      const result = await query('SELECT * FROM users WHERE email = $1 AND role = $2', [email, role]);
+      const result = await query('SELECT * FROM users WHERE email = $1', [email]);
       return result.rows[0];
     } catch (error) {
       throw createError(`Database operation failed: ${error.message}`, 500, 'DB_OPERATION_FAILED');
     }
   },
 
-  updateUsername: async (user_id, username, role) => {
+  updateUsername: async (user_id, username) => {
     try {
       const result = await query(
-        'UPDATE users SET username = $1, update_at = CURRENT_TIMESTAMP WHERE id = $2 AND role = $3 RETURNING *',
-        [username, user_id, role]
+        'UPDATE users SET username = $1, update_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+        [username, user_id]
       );
       if (result.rows.length === 0) {
         throw createError('User not found', 404, 'USER_NOT_FOUND');
@@ -79,12 +78,12 @@ const UserModel = {
     }
   },
 
-  updatePassword: async (user_id, newPassword, role) => {
+  updatePassword: async (user_id, newPassword) => {
     try {
       const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
       const result = await query(
-        'UPDATE users SET password = $1 WHERE id = $2 AND role = $3 RETURNING *',
-        [hashedNewPassword, user_id, role]
+        'UPDATE users SET password = $1 WHERE id = $2 RETURNING *',
+        [hashedNewPassword, user_id]
       );
       if (result.rows.length === 0) {
         throw createError('User not found', 404, 'USER_NOT_FOUND');
@@ -95,12 +94,12 @@ const UserModel = {
     }
   },
 
-  updateForgetPassword: async (email, newPassword, role) => {
+  updateForgetPassword: async (email, newPassword) => {
     try {
       const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
       const result = await query(
-        'UPDATE users SET password = $1 WHERE email = $2 AND role = $3 RETURNING *',
-        [hashedNewPassword, email, role]
+        'UPDATE users SET password = $1 WHERE email = $2 RETURNING *',
+        [hashedNewPassword, email]
       );
       if (result.rows.length === 0) {
         throw createError('User not found', 404, 'USER_NOT_FOUND');
@@ -111,13 +110,13 @@ const UserModel = {
     }
   },
 
-  updateUserField: async (user_id, updateData, role) => {
-    const updateFields = Object.keys(updateData).map((key, index) => `${key} = $${index + 3}`).join(', ');
+  updateUserField: async (user_id, updateData) => {
+    const updateFields = Object.keys(updateData).map((key, index) => `${key} = $${index + 2}`).join(', ');
     const values = Object.values(updateData);
     try {
       const result = await query(
-        `UPDATE users SET ${updateFields}, update_at = CURRENT_TIMESTAMP WHERE id = $1 AND role = $2 RETURNING *`,
-        [user_id, role, ...values]
+        `UPDATE users SET ${updateFields}, update_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
+        [user_id, ...values]
       );
       if (result.rows.length === 0) {
         throw createError('User not found', 404, 'USER_NOT_FOUND');
@@ -128,11 +127,11 @@ const UserModel = {
     }
   },
 
-  updateRefreshToken: async (user_id, refreshToken, role) => {
+  updateRefreshToken: async (user_id, refreshToken) => {
     try {
       const result = await query(
-        'UPDATE users SET refresh_token = $1, last_login = CURRENT_TIMESTAMP WHERE id = $2 AND role = $3 RETURNING *',
-        [refreshToken, user_id, role]
+        'UPDATE users SET refresh_token = $1, last_login = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+        [refreshToken, user_id]
       );
       if (result.rows.length === 0) {
         throw createError('User not found', 404, 'USER_NOT_FOUND');

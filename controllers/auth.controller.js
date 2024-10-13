@@ -1,11 +1,4 @@
-const { UserModel, UserDetailModel } = require("../models");
-const { storeOTP, verifyOTP } = require("../queue/producers/otp-producer");
-const {
-  sendNewNotificationPreference,
-} = require("../queue/producers/notification-preference-producer");
-const {
-  sendCreateNewNotification,
-} = require("../queue/producers/notification-producer");
+const { UserModel, UserDetailModel, OTPModel } = require("../models");
 const transporter = require("../config/nodemailerConfig");
 const bcryptjs = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -13,7 +6,7 @@ const crypto = require("crypto");
 const { handleRequest, createError } = require("../services/responseHandler");
 
 const generateOTP = () => crypto.randomBytes(3).toString("hex");
-const getEmailTemplate = (otp, role) => `
+const getEmailTemplate = (otp) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -57,12 +50,12 @@ const getEmailTemplate = (otp, role) => `
 <body>
     <div class="container">
         <h1>Email OTP Confirmation</h1>
-        <p>Dear ${role === "seller" ? "Seller" : "User"},</p>
+        <p>Dear User,</p>
         <p>Thank you for registering with us. To complete your registration, please use the following One-Time Password (OTP):</p>
         <div class="otp-code">${otp}</div>
         <p>This OTP is valid for 10 minutes. Please do not share this code with anyone.</p>
         <p>If you didn't request this OTP, please ignore this email.</p>
-        <p>Best regards,<br>${role === "seller" ? "Saleso" : "Your Company Name"}</p>
+        <p>Best regards,<br>Your Company Name</p>
     </div>
     <div class="footer">
         This is an automated message. Please do not reply to this email.
@@ -74,8 +67,8 @@ const getEmailTemplate = (otp, role) => `
 const AuthController = {
   verifyNewEmail: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const { email, role } = req.body;
-      const existingUser = await UserModel.getUserByEmail(email, role);
+      const { email } = req.body;
+      const existingUser = await UserModel.getUserByEmail(email);
       if (existingUser) {
         throw createError(
           `This <${email}> is linked to another account`,
@@ -84,12 +77,12 @@ const AuthController = {
         );
       }
       const otp = generateOTP();
-      await storeOTP(email, otp, role);
+      await OTPModel.storeOTP(email, otp);
       await transporter.sendMail({
         from: process.env.EMAIL_USER,
         to: email,
-        subject: `Saleso - Email OTP Confirmation ${role === "seller" ? "Seller" : ""}`,
-        html: getEmailTemplate(otp, role),
+        subject: `Email OTP Confirmation`,
+        html: getEmailTemplate(otp),
       });
       return { message: "Please check the OTP sent to gmail" };
     });
@@ -97,13 +90,13 @@ const AuthController = {
 
   registerUserWithOTP: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const { email, otp, username, password, role } = req.body;
-      const validOTP = await verifyOTP(email, otp, role);
+      const { email, otp, username, password } = req.body;
+      const validOTP = await OTPModel.verifyOTP(email, otp);
       if (!validOTP) {
         throw createError("Invalid or expired OTP", 400, "INVALID_OTP");
       }
 
-      if (await UserModel.getUserByUsername(username, role)) {
+      if (await UserModel.getUserByUsername(username)) {
         throw createError(
           "This username is already in use",
           400,
@@ -115,72 +108,21 @@ const AuthController = {
       const userData = {
         username,
         email,
-        role,
         password: hashedPassword,
         register_at: new Date(),
       };
 
-      const user = await UserModel.registerUser(userData, role);
-      if (role === "customer") {
-        const customer = await UserModel.getUserByEmail(email, role);
-        // Create customer detail
-        const detailData = {
-          customer_id: customer._id.toString(),
-          avatar: "",
-          name: "",
-          address: null,
-          birthdate: null,
-        };
-        await UserDetailModel.newDetail(detailData, role);
-        // Create customer notification
-        await sendNewNotificationPreference(customer._id.toString(), role);
-        // Create customer notification
-        const notificationData = {
-          title: "Welcome to Saleso",
-          content: "You have successfully registered an account",
-          notification_type: "account_notification",
-          target_type: "individual",
-          target_ids: [customer._id.toString()],
-          can_delete: false,
-          can_mark_as_read: false,
-          is_read: false,
-          created_at: new Date(),
-        };
-        await sendCreateNewNotification(notificationData);
-      } else {
-        const seller = await UserModel.getUserByEmail(email, role);
-        // Create seller detail
-        const detailData = {
-          seller_id: seller._id.toString(),
-          avatar_uri: "",
-          address: [],
-          categories: [],
-        };
-        await UserDetailModel.newDetail(detailData, role);
-        // Create seller notification preferences
-        await sendNewNotificationPreference(seller._id.toString(), role);
-        // Create seller notification
-        const notificationData = {
-          title: "Welcome to Saleso",
-          content: "You have successfully registered an account",
-          notification_type: "account_notification",
-          target_type: "individual",
-          target_ids: [seller._id.toString()],
-          can_delete: false,
-          can_mark_as_read: false,
-          is_read: false,
-          created_at: new Date(),
-        };
-        await sendCreateNewNotification(notificationData);
-      }
-      return { message: "User registered successfully", user_id: user };
+      const newUser = await UserModel.registerUser(userData);
+      // Create user detail
+      await UserDetailModel.newDetail(newUser);
+      return { message: "User registered successfully" };
     });
   },
 
   loginUser: async (req, res) => {
     handleRequest(req, res, async (req) => {
-      const { email, password, role } = req.body;
-      const existingUser = await UserModel.getUserByEmail(email, role);
+      const { email, password } = req.body;
+      const existingUser = await UserModel.getUserByEmail(email);
       if (!existingUser) {
         throw createError(
           "This email has not been registered.",
@@ -200,34 +142,26 @@ const AuthController = {
         );
       }
 
-      const accessToken = jwt.sign(
-        { user_id: existingUser._id, role },
+      const access_token = jwt.sign(
+        { user_id: existingUser.id },
         process.env.JWT_SECRET_KEY,
         { expiresIn: "7d" }
       );
-      const refreshToken = jwt.sign(
-        { user_id: existingUser._id, role },
+      const refresh_token = jwt.sign(
+        { user_id: existingUser.id },
         process.env.JWT_SECRET_KEY,
         { expiresIn: "30d" }
       );
-      await UserModel.updateRefreshToken(existingUser._id, refreshToken, role);
+      await UserModel.updateRefreshToken(existingUser.id, refreshToken);
 
-      const currentUser = {
-        user_id: existingUser._id,
-        username: existingUser.username,
-        role: role,
-      };
-
-      return { accessToken, refreshToken, currentUser };
+      return { access_token, refresh_token };
     });
   },
 
-  // use when change password, change email, do something need verify account...
   verifyAccount: async (req, res) => {
     handleRequest(req, res, async (req) => {
       const { email, password } = req.body;
-      const role = req.user.role;
-      const existingUser = await UserModel.getUserByEmail(email, role);
+      const existingUser = await UserModel.getUserByEmail(email);
       if (!existingUser) {
         throw createError(
           "This email has not been registered.",
@@ -253,82 +187,16 @@ const AuthController = {
   refreshAccessToken: async (req, res) => {
     handleRequest(req, res, async (req) => {
       const { accessToken, refreshToken } = req.token;
-      const user = await UserModel.getUserById(req.user.user_id, req.user.role);
+      const user = await UserModel.getUserById(req.user.user_id);
 
-      // Thêm thông tin người dùng vào response
       return {
         newAccessToken: accessToken,
         newRefreshToken: refreshToken,
         user: {
-          user_id: user._id,
+          user_id: user.id,
           username: user.username,
-          role: user.role,
         },
       };
-    });
-  },
-
-  handleGoogleAuth: async (accessToken, refreshToken, profile, done) => {
-    try {
-      const { id, emails, displayName } = profile;
-      const email = emails[0].value;
-      const role = "customer"; // Mặc định là customer, có thể thay đổi nếu cần
-
-      let user = await UserModel.getUserByEmail(email, role);
-
-      if (!user) {
-        // Nếu chưa tồn tại, tạo người dùng mới
-        const userData = {
-          username: displayName,
-          email: email,
-          password: id, // Sử dụng Google ID làm mật khẩu tạm thời
-          role: role,
-        };
-        const userId = await UserModel.registerUser(userData, role);
-        user = await UserModel.getUserById(userId, role);
-
-        // Tạo user detail
-        const detailData = {
-          customer_id: user._id.toString(),
-          avatar_uri: profile.photos[0].value,
-          name: displayName,
-          address: [],
-          age: null,
-        };
-        await UserDetailModel.newDetail(detailData, role);
-      }
-
-      done(null, user);
-    } catch (error) {
-      done(error, null);
-    }
-  },
-
-  handleGoogleAuthCallback: async (req, res) => {
-    handleRequest(req, res, async (req) => {
-      const user = req.user;
-      const accessToken = jwt.sign(
-        { user_id: user._id, role: user.role },
-        process.env.JWT_SECRET_KEY,
-        { expiresIn: "1d" }
-      );
-      const refreshToken = jwt.sign(
-        { user_id: user._id, role: user.role },
-        process.env.JWT_SECRET_KEY,
-        { expiresIn: "7d" }
-      );
-      await UserModel.updateRefreshToken(user._id, refreshToken, user.role);
-
-      const currentUser = {
-        user_id: user._id,
-        username: user.username,
-        role: user.role,
-      };
-
-      // Chuyển hướng người dùng về trang chủ với token
-      res.redirect(
-        `/login-success?accessToken=${accessToken}&refreshToken=${refreshToken}&user=${JSON.stringify(currentUser)}`
-      );
     });
   },
 };
