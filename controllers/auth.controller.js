@@ -152,7 +152,7 @@ const AuthController = {
         process.env.JWT_SECRET_KEY,
         { expiresIn: "30d" }
       );
-      await UserModel.updateRefreshToken(existingUser.id, refreshToken);
+      await UserModel.updateRefreshToken(existingUser.id, refresh_token);
 
       return { access_token, refresh_token };
     });

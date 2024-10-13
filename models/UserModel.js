@@ -127,11 +127,11 @@ const UserModel = {
     }
   },
 
-  updateRefreshToken: async (user_id, refreshToken) => {
+  updateRefreshToken: async (user_id, refresh_token) => {
     try {
       const result = await query(
         'UPDATE users SET refresh_token = $1, last_login = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-        [refreshToken, user_id]
+        [refresh_token, user_id]
       );
       if (result.rows.length === 0) {
         throw createError('User not found', 404, 'USER_NOT_FOUND');
