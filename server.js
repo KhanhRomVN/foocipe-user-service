@@ -13,14 +13,18 @@ const routes = require("./routes");
 const { sendError } = require("./services/responseHandler");
 
 const whiteList = process.env.WHITE_LIST.split(",");
+// const corsOptions = {
+//   origin: (origin, callback) => {
+//     if (!origin || whiteList.includes(origin)) {
+//       callback(null, true);
+//     } else {
+//       callback(new Error("Not allowed by CORS"));
+//     }
+//   },
+//   credentials: true,
+// };
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || whiteList.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
+  origin: true, 
   credentials: true,
 };
 
