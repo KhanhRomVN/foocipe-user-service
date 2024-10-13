@@ -1,5 +1,3 @@
-const logger = require("../config/logger");
-
 class AppError extends Error {
   constructor(message, statusCode, errorCode = null) {
     super(message);
@@ -29,7 +27,6 @@ const sendError = (res, error) => {
   }
 
   // Unexpected errors
-  logger.error("Unexpected error:", error);
   return sendResponse(res, 500, {
     status: "error",
     message: "Something went wrong!",

@@ -1,5 +1,4 @@
 const { UserModel, UserDetailModel, OTPModel } = require("../models");
-const logger = require("../config/logger");
 const transporter = require("../config/nodemailerConfig");
 const crypto = require("crypto");
 const { handleRequest, createError } = require("../services/responseHandler");
@@ -121,7 +120,6 @@ const UserController = {
         html: `<p>Your OTP code is: ${otp}</p>`,
       });
 
-      logger.info(`OTP sent to email: ${newEmail}`);
       return { message: "OTP sent to email" };
     });
   },
@@ -191,7 +189,6 @@ const UserController = {
         html: getEmailTemplate(otp, role),
       });
 
-      logger.info(`OTP sent to email: ${email}`);
       return { message: "OTP sent to email" };
     });
   },
