@@ -12,7 +12,7 @@ const routes = [
   },
   {
     method: "get",
-    path: "/user-detail",
+    path: "/user-info",
     middleware: [authToken],
     handler: UserController.getDetail,
   },

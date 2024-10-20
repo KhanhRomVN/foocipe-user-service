@@ -66,7 +66,7 @@ const UserModel = {
   updateUsername: async (user_id, username) => {
     try {
       const result = await query(
-        'UPDATE users SET username = $1, update_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
+        'UPDATE users SET username = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *', // Changed update_at to updated_at
         [username, user_id]
       );
       if (result.rows.length === 0) {

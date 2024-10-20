@@ -66,7 +66,11 @@ const UserController = {
   getUser: async (req, res) => {
     handleRequest(req, res, async (req) => {
       const user_id = req.user.id.toString();
-      return await UserModel.getUserById(user_id);
+      const user_data =  await UserModel.getUserById(user_id);
+      return {
+        username: user_data.username,
+        email: user_data.email,
+      };
     });
   },
 
